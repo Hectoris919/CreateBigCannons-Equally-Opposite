@@ -1,0 +1,6 @@
+{
+  "force_group.cbc_equally_opposite.recoil": "Recoil",
+  "force_group.cbc_equally_opposite.recoil.desc": "Impulse from Create Big Cannons weapons firing from the sublevel.",
+  "force_group.cbc_equally_opposite.impact": "Impact",
+  "force_group.cbc_equally_opposite.impact.desc": "Impulse from Create Big Cannons projectiles striking the sublevel."
+}
