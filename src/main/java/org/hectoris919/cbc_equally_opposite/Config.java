@@ -133,7 +133,7 @@ public final class Config {
 
 	public static double baseBigCannonProjectileMass() { return BASE_CANNON_PROJECTILE_MASS.get(); }
 	public static double baseAutocannonProjectileMass() { return BASE_AUTOCANNON_PROJECTILE_MASS.get(); }
-	public static double baseBigCannonGasImpulse() { return BASE_CANNON_GAS_IMPULSE.get(); }
+	public static double baseCannonGasImpulse() { return BASE_CANNON_GAS_IMPULSE.get(); }
 	public static double baseAutocannonGasImpulse() { return BASE_AUTOCANNON_GAS_IMPULSE.get(); }
 
 	public static double impactEfficiency() { return IMPACT_EFFICIENCY.get(); }

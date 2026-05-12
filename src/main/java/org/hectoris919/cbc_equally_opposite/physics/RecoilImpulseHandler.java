@@ -56,6 +56,38 @@ public final class RecoilImpulseHandler {
 		}
 	}
 
+	public static void onCannonBlankFire(ServerLevel level, Vec3 forward, Vec3 projectileSpawnPosition, double chargePower, double barrelLengthBlocks) {
+		if (Config.disableRecoil()) return;
+		if (!ImpulseMath.isUsefulVector(forward)) return;
+
+		Vec3 normalizedForward = forward.normalize();
+		double speedBpt = Math.max(0.0D, chargePower);
+		double speedMps = ImpulseMath.bptToMps(speedBpt);
+		PowderAndGas powderAndGas = computeCannonGasImpulse(chargePower, speedMps, barrelLengthBlocks);
+		double impulse = Math.max(0.0D, powderAndGas.gasImpulse());
+		if (!Double.isFinite(impulse) || impulse <= 0.0D) return;
+
+		double sableImpulse = ImpulseMath.siImpulseToSable(impulse);
+		Vec3 recoilImpulse = normalizedForward.scale(-sableImpulse);
+		Vec3 applicationPoint = projectileSpawnPosition.subtract(normalizedForward.scale(Config.recoilApplicationOffset()));
+		int recoilSteps = computeRecoilSteps(speedBpt, powderAndGas.powderChargeEquivalent(), powderAndGas.barrelLengthBlocks());
+
+		boolean queued = PendingImpulseQueue.enqueueForContaining(level, applicationPoint, recoilImpulse, ImpulseKind.RECOIL, recoilSteps);
+		if (queued && Config.debugImpulses()) {
+			EquallyOpposite.LOGGER.info(
+					"Big cannon blank recoil: chargePower={}, gas={} N*s, sable={} kpg*b/t, steps={}, powderEquivalent={}, barrelLength={} blocks, point={}, impulse={}",
+					chargePower,
+					powderAndGas.gasImpulse(),
+					sableImpulse,
+					recoilSteps,
+					powderAndGas.powderChargeEquivalent(),
+					powderAndGas.barrelLengthBlocks(),
+					applicationPoint,
+					recoilImpulse
+			);
+		}
+	}
+
 	private static int computeRecoilSteps(double projectileSpeedBpt, double powderChargeEquivalent, double barrelLengthBlocks) {
 		double barrelTicks = Math.max(0.0D, barrelLengthBlocks) / Math.max(projectileSpeedBpt, 0.1D);
 		double ventTicks = Math.max(0.0D, powderChargeEquivalent) * Config.recoilVentTicksPerCharge();
@@ -74,7 +106,7 @@ public final class RecoilImpulseHandler {
 		if (!GoingBallisticAccess.isAvailable()) {
 			double fallbackGasImpulse = autocannon
 					? Config.baseAutocannonGasImpulse()
-					: Config.baseBigCannonGasImpulse() * powderChargeEquivalent;
+					: Config.baseCannonGasImpulse() * powderChargeEquivalent;
 			return new PowderAndGas(fallbackGasImpulse, powderChargeEquivalent, barrelLengthBlocks);
 		}
 
@@ -92,11 +124,30 @@ public final class RecoilImpulseHandler {
 		if (!Double.isFinite(gasImpulse) || gasImpulse < 0.0D) {
 			double fallbackGasImpulse = autocannon
 					? Config.baseAutocannonGasImpulse()
-					: Config.baseBigCannonGasImpulse() * powderChargeEquivalent;
+					: Config.baseCannonGasImpulse() * powderChargeEquivalent;
 			return new PowderAndGas(fallbackGasImpulse, powderChargeEquivalent, barrelLengthBlocks);
 		}
 
 		return new PowderAndGas(gasImpulse, powderChargeEquivalent, barrelLengthBlocks);
+	}
+
+	private static PowderAndGas computeCannonGasImpulse(double chargePower, double referenceSpeedMps, double barrelLengthBlocks) {
+		double powderChargeEquivalent = Math.max(0.0D, chargePower / 2.0D);
+		double saneBarrelLength = Double.isFinite(barrelLengthBlocks) && barrelLengthBlocks > 0.0D ? barrelLengthBlocks : 1.0D;
+
+		if (!GoingBallisticAccess.isAvailable()) {
+			return new PowderAndGas(Config.baseCannonGasImpulse() * powderChargeEquivalent, powderChargeEquivalent, saneBarrelLength);
+		}
+
+		double powderMass = powderChargeEquivalent * GoingBallisticAccess.cannonPowderMass(0.33D);
+		double gasVelocityMps = referenceSpeedMps * Config.gasVelocityMultiplier();
+		double gasImpulse = Config.gasMomentumMultiplier() * powderMass * gasVelocityMps;
+
+		if (!Double.isFinite(gasImpulse) || gasImpulse < 0.0D) {
+			return new PowderAndGas(Config.baseCannonGasImpulse() * powderChargeEquivalent, powderChargeEquivalent, saneBarrelLength);
+		}
+
+		return new PowderAndGas(gasImpulse, powderChargeEquivalent, saneBarrelLength);
 	}
 
 	private record PowderAndGas(double gasImpulse, double powderChargeEquivalent, double barrelLengthBlocks) { }
