@@ -54,6 +54,23 @@ public final class RecoilImpulseHandler {
 					recoilImpulse
 			);
 		}
+
+		Vec3 muzzleEndPosition = MountedCannonContextTracker.currentMuzzleEndPosition();
+		if (muzzleEndPosition == null || !ImpulseMath.isFinite(muzzleEndPosition)) muzzleEndPosition = projectile.position();
+
+		MuzzleBlastHandler.start(
+				serverLevel,
+				muzzleEndPosition,
+				forward,
+				powderAndGas.gasImpulse(),
+				powderAndGas.powderMass(),
+				powderAndGas.gasVelocity(),
+				projectileMass,
+				speedMps,
+				recoilSteps,
+				autocannon,
+				projectile
+		);
 	}
 
 	public static void onCannonBlankFire(ServerLevel level, Vec3 forward, Vec3 projectileSpawnPosition, double chargePower, double barrelLengthBlocks) {
@@ -86,6 +103,23 @@ public final class RecoilImpulseHandler {
 					recoilImpulse
 			);
 		}
+
+		Vec3 muzzleEndPosition = MountedCannonContextTracker.currentMuzzleEndPosition();
+		if (muzzleEndPosition == null || !ImpulseMath.isFinite(muzzleEndPosition)) muzzleEndPosition = projectileSpawnPosition;
+
+		MuzzleBlastHandler.start(
+				level,
+				muzzleEndPosition,
+				normalizedForward,
+				powderAndGas.gasImpulse(),
+				powderAndGas.powderMass(),
+				powderAndGas.gasVelocity(),
+				0.0D,
+				speedMps,
+				recoilSteps,
+				false,
+				null
+		);
 	}
 
 	private static int computeRecoilSteps(double projectileSpeedBpt, double powderChargeEquivalent, double barrelLengthBlocks) {
@@ -107,7 +141,9 @@ public final class RecoilImpulseHandler {
 			double fallbackGasImpulse = autocannon
 					? Config.baseAutocannonGasImpulse()
 					: Config.baseCannonGasImpulse() * powderChargeEquivalent;
-			return new PowderAndGas(fallbackGasImpulse, powderChargeEquivalent, barrelLengthBlocks);
+			double gasVelocityMps = projectileSpeedMps * Config.gasVelocityMultiplier();
+			double powderMass = approximatePowderMassFromGasImpulse(fallbackGasImpulse, gasVelocityMps);
+			return new PowderAndGas(fallbackGasImpulse, powderMass, gasVelocityMps, powderChargeEquivalent, barrelLengthBlocks);
 		}
 
 		double fallbackPowderMass = autocannon ? 0.09D : 0.33D;
@@ -125,10 +161,11 @@ public final class RecoilImpulseHandler {
 			double fallbackGasImpulse = autocannon
 					? Config.baseAutocannonGasImpulse()
 					: Config.baseCannonGasImpulse() * powderChargeEquivalent;
-			return new PowderAndGas(fallbackGasImpulse, powderChargeEquivalent, barrelLengthBlocks);
+			double fallbackPowderMassKg = approximatePowderMassFromGasImpulse(fallbackGasImpulse, gasVelocityMps);
+			return new PowderAndGas(fallbackGasImpulse, fallbackPowderMass, gasVelocityMps, powderChargeEquivalent, barrelLengthBlocks);
 		}
 
-		return new PowderAndGas(gasImpulse, powderChargeEquivalent, barrelLengthBlocks);
+		return new PowderAndGas(gasImpulse, powderMass, gasVelocityMps, powderChargeEquivalent, barrelLengthBlocks);
 	}
 
 	private static PowderAndGas computeCannonGasImpulse(double chargePower, double referenceSpeedMps, double barrelLengthBlocks) {
@@ -136,7 +173,10 @@ public final class RecoilImpulseHandler {
 		double saneBarrelLength = Double.isFinite(barrelLengthBlocks) && barrelLengthBlocks > 0.0D ? barrelLengthBlocks : 1.0D;
 
 		if (!GoingBallisticAccess.isAvailable()) {
-			return new PowderAndGas(Config.baseCannonGasImpulse() * powderChargeEquivalent, powderChargeEquivalent, saneBarrelLength);
+			double fallbackGasImpulse = Config.baseCannonGasImpulse() * powderChargeEquivalent;
+			double gasVelocityMps = referenceSpeedMps * Config.gasVelocityMultiplier();
+			double powderMass = approximatePowderMassFromGasImpulse(fallbackGasImpulse, gasVelocityMps);
+			return new PowderAndGas(fallbackGasImpulse, powderMass, gasVelocityMps, powderChargeEquivalent, saneBarrelLength);
 		}
 
 		double powderMass = powderChargeEquivalent * GoingBallisticAccess.cannonPowderMass(0.33D);
@@ -144,11 +184,18 @@ public final class RecoilImpulseHandler {
 		double gasImpulse = Config.gasMomentumMultiplier() * powderMass * gasVelocityMps;
 
 		if (!Double.isFinite(gasImpulse) || gasImpulse < 0.0D) {
-			return new PowderAndGas(Config.baseCannonGasImpulse() * powderChargeEquivalent, powderChargeEquivalent, saneBarrelLength);
+			double fallbackGasImpulse = Config.baseCannonGasImpulse() * powderChargeEquivalent;
+			double fallbackPowderMass = approximatePowderMassFromGasImpulse(fallbackGasImpulse, gasVelocityMps);
+			return new PowderAndGas(fallbackGasImpulse, fallbackPowderMass, gasVelocityMps, powderChargeEquivalent, saneBarrelLength);
 		}
 
-		return new PowderAndGas(gasImpulse, powderChargeEquivalent, saneBarrelLength);
+		return new PowderAndGas(gasImpulse, powderMass, gasVelocityMps, powderChargeEquivalent, saneBarrelLength);
 	}
 
-	private record PowderAndGas(double gasImpulse, double powderChargeEquivalent, double barrelLengthBlocks) { }
+	private static double approximatePowderMassFromGasImpulse(double gasImpulse, double gasVelocityMps) {
+		if (!Double.isFinite(gasImpulse) || gasImpulse <= 0.0D || !Double.isFinite(gasVelocityMps) || gasVelocityMps <= 0.0D) return 0.0D;
+		return gasImpulse / gasVelocityMps;
+	}
+
+	private record PowderAndGas(double gasImpulse, double powderMass, double gasVelocity, double powderChargeEquivalent, double barrelLengthBlocks) { }
 }

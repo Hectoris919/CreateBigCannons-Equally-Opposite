@@ -30,8 +30,9 @@ public abstract class MountedBigCannonContraptionRecoilContextMixin extends Abst
 
 	@Inject(method = "fireShot", at = @At("HEAD"), require = 0)
 	private void cbeo$enterRecoilContext(ServerLevel level, PitchOrientedContraptionEntity entity, CallbackInfo ci) {
-		MountedCannonContextTracker.enter(this);
-		this.cbeo$pendingBlankFireEstimate = this.cbeo$estimateBlankFire(level, entity);
+		Vec3 muzzleEndPosition = this.cbeo$estimateMuzzleEndPosition(entity);
+		MountedCannonContextTracker.enter(this, muzzleEndPosition);
+		this.cbeo$pendingBlankFireEstimate = this.cbeo$estimateBlankFire(level, entity, muzzleEndPosition);
 	}
 
 	@Inject(
@@ -59,7 +60,7 @@ public abstract class MountedBigCannonContraptionRecoilContextMixin extends Abst
 	}
 
 	@Unique
-	private BlankFireEstimate cbeo$estimateBlankFire(ServerLevel level, PitchOrientedContraptionEntity entity) {
+	private BlankFireEstimate cbeo$estimateBlankFire(ServerLevel level, PitchOrientedContraptionEntity entity, Vec3 muzzleEndPosition) {
 		if (this.startPos == null || this.initialOrientation == null) return null;
 
 		BlockPos currentPos = this.startPos.immutable();
@@ -100,21 +101,41 @@ public abstract class MountedBigCannonContraptionRecoilContextMixin extends Abst
 
 		if (chargePower <= 0.0D) return null;
 
-		Vec3 projectileSpawnPosition = entity.toGlobalVector(Vec3.atCenterOf(currentPos.relative(this.initialOrientation)), 0);
-		Vec3 centerPosition = entity.toGlobalVector(Vec3.atCenterOf(BlockPos.ZERO), 0);
-		Vec3 forward = projectileSpawnPosition.subtract(centerPosition);
+		if (muzzleEndPosition == null) muzzleEndPosition = this.cbeo$estimateMuzzleEndPosition(entity);
+		if (muzzleEndPosition == null) return null;
+
+		Vec3 insideMuzzlePosition = entity.toGlobalVector(Vec3.atCenterOf(currentPos.relative(this.initialOrientation.getOpposite())), 0);
+		Vec3 forward = muzzleEndPosition.subtract(insideMuzzlePosition);
 		if (!Double.isFinite(forward.x) || !Double.isFinite(forward.y) || !Double.isFinite(forward.z) || forward.lengthSqr() < 1.0E-8D) {
 			return null;
 		}
 		forward = forward.normalize();
-		projectileSpawnPosition = projectileSpawnPosition.subtract(forward.scale(2.0D));
 
 		Double trackedBarrelLength = MountedCannonContextTracker.currentBarrelLengthBlocks();
 		double barrelLengthBlocks = trackedBarrelLength != null && Double.isFinite(trackedBarrelLength) && trackedBarrelLength > 0.0D
 				? trackedBarrelLength
 				: Math.max(1.0D, barrelTravelled);
 
-		return new BlankFireEstimate(chargePower, barrelLengthBlocks, forward, projectileSpawnPosition);
+		return new BlankFireEstimate(chargePower, barrelLengthBlocks, forward, muzzleEndPosition);
+	}
+
+	@Unique
+	private Vec3 cbeo$estimateMuzzleEndPosition(PitchOrientedContraptionEntity entity) {
+		if (this.startPos == null || this.initialOrientation == null || entity == null) return null;
+		BlockPos currentPos = this.startPos.immutable();
+		BlockPos lastCannonPos = null;
+		int safety = 0;
+		while (this.presentBlockEntities.get(currentPos) instanceof IBigCannonBlockEntity && safety++ < 512) {
+			lastCannonPos = currentPos.immutable();
+			currentPos = currentPos.relative(this.initialOrientation);
+		}
+		if (lastCannonPos == null) return null;
+
+		Vec3 localForward = new Vec3(this.initialOrientation.getStepX(), this.initialOrientation.getStepY(), this.initialOrientation.getStepZ());
+		if (!Double.isFinite(localForward.x) || !Double.isFinite(localForward.y) || !Double.isFinite(localForward.z) || localForward.lengthSqr() < 1.0E-8D) return null;
+		Vec3 localMuzzleEnd = Vec3.atCenterOf(lastCannonPos).add(localForward.normalize().scale(0.501D));
+		Vec3 globalMuzzleEnd = entity.toGlobalVector(localMuzzleEnd, 0);
+		return Double.isFinite(globalMuzzleEnd.x) && Double.isFinite(globalMuzzleEnd.y) && Double.isFinite(globalMuzzleEnd.z) ? globalMuzzleEnd : null;
 	}
 
 	@Unique

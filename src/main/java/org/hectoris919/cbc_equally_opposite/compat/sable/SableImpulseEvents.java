@@ -11,15 +11,22 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import org.hectoris919.cbc_equally_opposite.Config;
 import org.hectoris919.cbc_equally_opposite.EquallyOpposite;
 import org.hectoris919.cbc_equally_opposite.physics.ImpulseKind;
+import org.hectoris919.cbc_equally_opposite.physics.MuzzleBlastHandler;
 import org.hectoris919.cbc_equally_opposite.physics.PendingImpulseQueue;
 import org.hectoris919.cbc_equally_opposite.physics.PendingPointImpulse;
 import org.hectoris919.cbc_equally_opposite.registry.EOForceGroups;
 import net.minecraft.server.level.ServerLevel;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import java.util.List;
 
 public final class SableImpulseEvents {
 	private SableImpulseEvents() { }
+
+	@SubscribeEvent
+	public static void onLevelTick(LevelTickEvent.Post event) {
+		if (event.getLevel() instanceof ServerLevel serverLevel) MuzzleBlastHandler.tick(serverLevel);
+	}
 
 	@SubscribeEvent
 	public static void onPrePhysicsTick(ForgeSablePrePhysicsTickEvent event) {

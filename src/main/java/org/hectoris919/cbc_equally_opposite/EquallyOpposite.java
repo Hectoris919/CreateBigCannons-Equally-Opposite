@@ -3,6 +3,7 @@ package org.hectoris919.cbc_equally_opposite;
 import com.mojang.logging.LogUtils;
 import org.hectoris919.cbc_equally_opposite.compat.sable.SableImpulseEvents;
 import org.hectoris919.cbc_equally_opposite.registry.EOForceGroups;
+import org.hectoris919.cbc_equally_opposite.registry.EOGameRules;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -17,6 +18,7 @@ public final class EquallyOpposite {
 	public static final Logger LOGGER = LogUtils.getLogger();
 
 	public EquallyOpposite(IEventBus modEventBus, ModContainer modContainer) {
+		EOGameRules.register();
 		EOForceGroups.register(modEventBus);
 		modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 		NeoForge.EVENT_BUS.register(SableImpulseEvents.class);

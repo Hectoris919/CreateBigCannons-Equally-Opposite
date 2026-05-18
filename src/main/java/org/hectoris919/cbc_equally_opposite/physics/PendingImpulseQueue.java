@@ -55,6 +55,37 @@ public final class PendingImpulseQueue {
 		return true;
 	}
 
+	public static boolean enqueueForSubLevel(ServerLevel level, java.util.UUID subLevelId, Vec3 pointInSubLevelSpace, Vec3 totalImpulse, ImpulseKind kind, int steps) {
+		if (subLevelId == null) return false;
+		if (!ImpulseMath.isUsefulVector(totalImpulse)) return false;
+
+		int safeSteps = Math.max(1, steps);
+		Vec3 impulsePerStep = totalImpulse.scale(1.0D / safeSteps);
+		PendingPointImpulse pending = new PendingPointImpulse(
+				subLevelId,
+				pointInSubLevelSpace,
+				impulsePerStep,
+				kind,
+				safeSteps
+		);
+
+		enqueue(level.dimension(), pending);
+
+		if (Config.debugImpulses()) {
+			EquallyOpposite.LOGGER.info(
+					"Queued {} impulse for sublevel {} at {}: sourceTotal={}, perStep={}, steps={}",
+					kind,
+					subLevelId,
+					pointInSubLevelSpace,
+					totalImpulse,
+					impulsePerStep,
+					safeSteps
+			);
+		}
+
+		return true;
+	}
+
 	public static void enqueue(ResourceKey<Level> dimension, PendingPointImpulse impulse) {
 		BY_DIMENSION.computeIfAbsent(dimension, ignored -> new ConcurrentLinkedQueue<>()).add(impulse);
 	}
